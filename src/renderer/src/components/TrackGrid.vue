@@ -23,6 +23,11 @@ function durText(sec?: number): string {
   const s = Math.floor(sec % 60)
   return `${m}:${String(s).padStart(2, '0')}`
 }
+
+function onCardClick(event: MouseEvent, id: string) {
+  if (event.shiftKey) event.preventDefault()
+  emit('toggle', id, event.shiftKey)
+}
 </script>
 
 <template>
@@ -41,7 +46,7 @@ function durText(sec?: number): string {
         :key="t.id"
         class="card"
         :class="{ checked: selectedIds.has(t.id) }"
-        @click="emit('toggle', t.id, $event.shiftKey)"
+        @click="onCardClick($event, t.id)"
       >
         <div class="cover-wrap">
           <img v-if="t.cover" class="cover" :src="t.cover" loading="lazy" alt="" />
