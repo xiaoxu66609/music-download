@@ -328,9 +328,9 @@ export function createApp(deps: AppDeps) {
       }
       if (wantLrc && lyrics) fs.writeFileSync(lrcPath, lyrics, 'utf-8')
     } catch (e) {
-      fs.rmSync(dest, { force: true })
-      fs.rmSync(lrcPath, { force: true })
-      throw e
+      // 音频已落盘：标签/歌词失败时不删文件（与 unlock 解密补全路径一致）
+      job.error = `标签/歌词写入失败：${e instanceof Error ? e.message : String(e)}`
+      return { outputPath: dest }
     }
     return { outputPath: dest }
   }

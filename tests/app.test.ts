@@ -189,7 +189,7 @@ interface Env {
   server: http.Server
   recorded: string[]   // 下载源实际收到的路径
   debugLog?: string    // 仅当 makeEnv 传了 debugLogFile 时存在（断言诊断日志用）
-  events: { start: number; done: number; failed: number; active: number; peak: number; donePaths: string[]; doneAnon: Array<boolean | undefined>; doneDowngraded: Array<boolean | undefined>; doneFinalQuality: Array<Quality | undefined>; failedErrors: string[]; startIds: string[]; failedIds: string[] }
+  events: { start: number; done: number; failed: number; active: number; peak: number; donePaths: string[]; doneAnon: Array<boolean | undefined>; doneDowngraded: Array<boolean | undefined>; doneFinalQuality: Array<Quality | undefined>; doneErrors: string[]; failedErrors: string[]; startIds: string[]; failedIds: string[] }
   fetchMock: ReturnType<typeof vi.fn>
 }
 
@@ -226,7 +226,7 @@ async function makeEnv(opts: { concurrency?: number; delayMs?: number; detailBro
   const fetchImpl = makeFetchImpl({ port, purls: opts.purls, detailBroken: opts.detailBroken, searchHits: opts.searchHits, deadVkey: opts.deadVkey, neDeadUrl: opts.neDeadUrl, loginExpired: opts.loginExpired, detailSizes: opts.detailSizes, coverBytes: opts.coverBytes })
   // 诊断日志：附属文件（cover/cue）写失败只进这里，不进事件流——要断言「失败没被吞掉」只能读文件
   const debugLog = opts.debugLogFile ? path.join(dir, 'dbg.log') : undefined
-  const events = { start: 0, done: 0, failed: 0, active: 0, peak: 0, donePaths: [] as string[], doneAnon: [] as Array<boolean | undefined>, doneDowngraded: [] as Array<boolean | undefined>, doneFinalQuality: [] as Array<Quality | undefined>, failedErrors: [] as string[], startIds: [] as string[], failedIds: [] as string[] }
+  const events = { start: 0, done: 0, failed: 0, active: 0, peak: 0, donePaths: [] as string[], doneAnon: [] as Array<boolean | undefined>, doneDowngraded: [] as Array<boolean | undefined>, doneFinalQuality: [] as Array<Quality | undefined>, doneErrors: [] as string[], failedErrors: [] as string[], startIds: [] as string[], failedIds: [] as string[] }
   const app = createApp({
     userDataDir: dir,
     fetchImpl,
@@ -247,6 +247,7 @@ async function makeEnv(opts: { concurrency?: number; delayMs?: number; detailBro
         events.doneAnon.push(p.anonFallback)
         events.doneDowngraded.push(p.downgraded)
         events.doneFinalQuality.push(p.finalQuality)
+        if (p.error) events.doneErrors.push(p.error)
       }
       if (ch === 'dl:failed') {
         events.failed++
@@ -359,12 +360,13 @@ describe('createApp runner 装配（T10 评审修复）', () => {
     expect(env.events.failedErrors.some((m) => /未拿到可播放/.test(m))).toBe(true)
   })
 
-  it('I7: 标签失败 → jobFailed 且已下载文件被清理', async () => {
+  it('I7: 标签失败 → 任务仍记为完成且保留已下载文件', async () => {
     const env = await makeEnv({ detailBroken: true })
     env.app.enqueue({ tracks: [track('y')], quality: '320', source: 'qq' })
-    await waitFor(() => env.events.failed >= 1)
-    expect(env.events.done).toBe(0)
-    expect(fs.readdirSync(env.dl)).toEqual([]) // 占位/下载文件/.lrc 全部清理
+    await waitFor(() => env.events.done >= 1)
+    expect(env.events.failed).toBe(0)
+    expect(fs.readdirSync(env.dl).some((f) => f.endsWith('.mp3'))).toBe(true)
+    expect(env.events.doneErrors?.some((m) => /标签\/歌词写入失败/.test(m))).toBe(true)
   })
 
   it('I4: settingsSet 并发生效，新批次按新并发调度', async () => {
